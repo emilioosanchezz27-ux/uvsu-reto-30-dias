@@ -76,7 +76,7 @@ export async function joinGroupByCode(inviteCode: string, challengeId?: string):
       group_id: group.id,
       user_id: session.user.id,
       challenge_id: challengeId ?? null,
-    })
+    }, { onConflict: 'group_id,user_id' })
 
   if (memberError) return null
 
