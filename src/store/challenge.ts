@@ -45,32 +45,40 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
   },
 
   loadFromSupabase: async () => {
-    const session = await getSession()
-    if (!session) {
-      // Sin sesión → cargar desde local
+    try {
+      const session = await getSession()
+      if (!session) {
+        get().loadFromLocal()
+        return
+      }
+
+      set({ hasAccount: true })
+      const [cloudChallenge, localChallenge] = await Promise.all([
+        fetchChallenge(),
+        Promise.resolve(LocalStorage.getChallenge()),
+      ])
+
+      if (cloudChallenge) {
+        const logs = await fetchLogs(cloudChallenge.id)
+        LocalStorage.setChallenge(cloudChallenge)
+        LocalStorage.setLogs(logs)
+        set({ challenge: cloudChallenge, logs, isLoaded: true })
+      } else if (localChallenge) {
+        // Hay datos locales pero no en la nube → migrar (reasigna IDs si son nanoid)
+        try {
+          const localLogs = LocalStorage.getLogs()
+          const result = await migrateLocalToSupabase(localChallenge, localLogs)
+          set({ challenge: result.challenge, logs: result.logs, isLoaded: true })
+        } catch {
+          // Si la migración falla, cargar desde local igualmente
+          set({ challenge: localChallenge, logs: LocalStorage.getLogs(), isLoaded: true })
+        }
+      } else {
+        set({ isLoaded: true })
+      }
+    } catch {
+      // En cualquier error de red/Supabase, caer a local
       get().loadFromLocal()
-      return
-    }
-
-    set({ hasAccount: true })
-    const [challenge, localChallenge] = await Promise.all([
-      fetchChallenge(),
-      Promise.resolve(LocalStorage.getChallenge()),
-    ])
-
-    if (challenge) {
-      const logs = await fetchLogs(challenge.id)
-      // Sincronizar también en local como backup
-      LocalStorage.setChallenge(challenge)
-      LocalStorage.setLogs(logs)
-      set({ challenge, logs, isLoaded: true })
-    } else if (localChallenge) {
-      // Hay datos locales pero no en la nube → migrar
-      const localLogs = LocalStorage.getLogs()
-      await migrateLocalToSupabase(localChallenge, localLogs)
-      set({ challenge: localChallenge, logs: localLogs, isLoaded: true })
-    } else {
-      set({ isLoaded: true })
     }
   },
 

@@ -6,6 +6,10 @@
 
 import { createClient } from './supabase'
 import { Challenge, Habit, DailyLog } from '@/types'
+import { LocalStorage } from './local-storage'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isUUID(s: string) { return UUID_RE.test(s) }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -194,12 +198,38 @@ export async function fetchLogs(challengeId: string): Promise<DailyLog[]> {
 export async function migrateLocalToSupabase(
   challenge: Challenge,
   logs: DailyLog[]
-): Promise<void> {
+): Promise<{ challenge: Challenge; logs: DailyLog[] }> {
   const session = await getSession()
-  if (!session) return
+  if (!session) return { challenge, logs }
 
-  await upsertChallenge({ ...challenge, userId: session.user.id })
-  for (const log of logs) await upsertLog(log)
+  let migratedChallenge = challenge
+  let migratedLogs = logs
+
+  // Si los IDs no son UUIDs válidos (p.ej. generados con nanoid), reasignar
+  if (!isUUID(challenge.id)) {
+    const newChallengeId = crypto.randomUUID()
+    const habitIdMap: Record<string, string> = {}
+    const newHabits = challenge.habits.map(h => {
+      const newId = crypto.randomUUID()
+      habitIdMap[h.id] = newId
+      return { ...h, id: newId, challengeId: newChallengeId }
+    })
+    migratedChallenge = { ...challenge, id: newChallengeId, habits: newHabits }
+    migratedLogs = logs.map(l => ({
+      ...l,
+      id: isUUID(l.id) ? l.id : crypto.randomUUID(),
+      challengeId: newChallengeId,
+      habitId: habitIdMap[l.habitId] ?? l.habitId,
+    }))
+    // Actualizar localStorage con los nuevos IDs para consistencia
+    LocalStorage.setChallenge(migratedChallenge)
+    LocalStorage.setLogs(migratedLogs)
+  }
+
+  await upsertChallenge({ ...migratedChallenge, userId: session.user.id })
+  for (const log of migratedLogs) await upsertLog(log)
+
+  return { challenge: migratedChallenge, logs: migratedLogs }
 }
 
 // ── Admin config ──────────────────────────────────────────────────────────────

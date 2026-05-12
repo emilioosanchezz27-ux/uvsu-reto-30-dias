@@ -2,7 +2,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { nanoid } from 'nanoid'
 import { Challenge, Habit, EMILIO_PRESET_HABITS } from '@/types'
 import { useChallengeStore } from '@/store/challenge'
 import { toDateString, fromDateString } from '@/lib/date-utils'
@@ -33,7 +32,7 @@ export default function OnboardingPage() {
   }
 
   async function handleStartChallenge(withAccount: boolean) {
-    const challengeId = nanoid()
+    const challengeId = crypto.randomUUID()
     const startDate = mode === 'custom' ? customStartDate : toDateString(new Date())
     const startDateObj = fromDateString(startDate)
     const endDateObj = new Date(startDateObj)
@@ -50,7 +49,7 @@ export default function OnboardingPage() {
       createdAt: new Date().toISOString(),
       habits: habits.map((h, i) => ({
         ...h,
-        id: nanoid(),
+        id: crypto.randomUUID(),
         challengeId,
         sortOrder: i,
       })),
