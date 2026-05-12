@@ -1,16 +1,20 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2, AlertTriangle } from 'lucide-react'
+import { Trash2, AlertTriangle, BookOpen } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { useChallengeStore } from '@/store/challenge'
 import HabitEditor from '@/components/habits/HabitEditor'
+import Tutorial from '@/components/ui/Tutorial'
 import BottomNav from '@/components/ui/BottomNav'
+import { LocalStorage } from '@/lib/local-storage'
 import { Habit } from '@/types'
 
 export default function SettingsPage() {
   const router = useRouter()
   const { challenge, isLoaded, loadFromLocal, clearChallenge, updateHabit, addHabit, removeHabit } = useChallengeStore()
   const [showConfirmReset, setShowConfirmReset] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(false)
 
   useEffect(() => {
     if (!isLoaded) loadFromLocal()
@@ -83,6 +87,24 @@ export default function SettingsPage() {
             />
           </section>
 
+          {/* Tutorial */}
+          <section>
+            <h2 className="text-xs font-black tracking-widest mb-3" style={{ color: 'var(--text-secondary)' }}>
+              AYUDA
+            </h2>
+            <button
+              onClick={() => setShowTutorial(true)}
+              className="w-full rounded-xl p-4 flex items-center gap-3 text-left"
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+            >
+              <BookOpen size={18} color="var(--accent-primary)" />
+              <div>
+                <p className="font-semibold text-sm">Ver tutorial</p>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Repasa cómo funciona el sistema de vidas, XP y streaks</p>
+              </div>
+            </button>
+          </section>
+
           {/* Zona peligrosa */}
           <section>
             <h2 className="text-xs font-black tracking-widest mb-3" style={{ color: 'var(--danger)' }}>
@@ -145,6 +167,14 @@ export default function SettingsPage() {
       </div>
 
       <BottomNav />
+      <AnimatePresence>
+        {showTutorial && (
+          <Tutorial onClose={() => {
+            LocalStorage.markTutorialSeen()
+            setShowTutorial(false)
+          }} />
+        )}
+      </AnimatePresence>
     </>
   )
 }

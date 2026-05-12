@@ -5,6 +5,7 @@ const KEYS = {
   LOGS: 'uvsu_logs',
   LAST_QUOTE_TIME: 'uvsu_last_quote_time',
   LIVES_RECOVERED: 'uvsu_lives_recovered',
+  HAS_SEEN_TUTORIAL: 'uvsu_has_seen_tutorial',
 } as const
 
 export const LocalStorage = {
@@ -69,6 +70,21 @@ export const LocalStorage = {
     if (typeof window === 'undefined') return
     const current = this.getLivesRecovered()
     localStorage.setItem(KEYS.LIVES_RECOVERED, String(current + 1))
+  },
+
+  hasSeenTutorial(): boolean {
+    if (typeof window === 'undefined') return true
+    return localStorage.getItem(KEYS.HAS_SEEN_TUTORIAL) === 'true'
+  },
+
+  markTutorialSeen(): void {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(KEYS.HAS_SEEN_TUTORIAL, 'true')
+  },
+
+  resetTutorial(): void {
+    if (typeof window === 'undefined') return
+    localStorage.removeItem(KEYS.HAS_SEEN_TUTORIAL)
   },
 
   clear(): void {

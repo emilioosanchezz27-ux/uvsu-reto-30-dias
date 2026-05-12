@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Share2 } from 'lucide-react'
 import { ShareCardCanvas, generateShareImage } from '@/components/share/ShareCard'
 import { useChallengeStore } from '@/store/challenge'
@@ -16,11 +16,13 @@ import {
 } from '@/lib/game-logic'
 import { LocalStorage } from '@/lib/local-storage'
 import { DEFAULT_MOTIVATIONAL_QUOTES } from '@/types'
+import { getMyGroups, postFeedEvent } from '@/lib/groups'
 import DayHeader from '@/components/dashboard/DayHeader'
 import XPBar from '@/components/dashboard/XPBar'
 import HabitCard from '@/components/habits/HabitCard'
 import DailyComplete from '@/components/dashboard/DailyComplete'
 import MotivationalQuote from '@/components/ui/MotivationalQuote'
+import Tutorial from '@/components/ui/Tutorial'
 import BottomNav from '@/components/ui/BottomNav'
 
 export default function DashboardPage() {
@@ -28,6 +30,7 @@ export default function DashboardPage() {
   const { challenge, logs, isLoaded, loadFromLocal, loadFromSupabase, checkHabit } = useChallengeStore()
 
   const [showComplete, setShowComplete] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(false)
   const [xpEarned, setXpEarned] = useState(0)
   const [motivationalQuote, setMotivationalQuote] = useState<string | null>(null)
   const [lifeAnimations, setLifeAnimations] = useState<Record<string, 'break' | 'restore' | null>>({})
@@ -43,6 +46,14 @@ export default function DashboardPage() {
   useEffect(() => {
     if (isLoaded && !challenge) router.replace('/onboarding')
   }, [isLoaded, challenge, router])
+
+  // Mostrar tutorial la primera vez
+  useEffect(() => {
+    if (!isLoaded || !challenge) return
+    if (!LocalStorage.hasSeenTutorial()) {
+      setTimeout(() => setShowTutorial(true), 600)
+    }
+  }, [isLoaded, challenge])
 
   // Mostrar frase motivacional al abrir (una vez cada 4h)
   useEffect(() => {
@@ -83,6 +94,13 @@ export default function DashboardPage() {
       setXpEarned(xp)
       setTimeout(() => setShowComplete(true), 300)
       setPrevCompleted(true)
+      // Publicar evento en todos los grupos del usuario
+      const currentDayNumber = getDayNumber(challenge.startDate)
+      getMyGroups().then(groups => {
+        groups.forEach(g => {
+          postFeedEvent(g.id, 'perfect_day', currentDayNumber).catch(() => {})
+        })
+      }).catch(() => {})
     } else if (!allDone) {
       setPrevCompleted(false)
     }
@@ -234,6 +252,15 @@ export default function DashboardPage() {
         quote={motivationalQuote}
         onClose={() => setMotivationalQuote(null)}
       />
+
+      <AnimatePresence>
+        {showTutorial && (
+          <Tutorial onClose={() => {
+            LocalStorage.markTutorialSeen()
+            setShowTutorial(false)
+          }} />
+        )}
+      </AnimatePresence>
     </>
   )
 }
