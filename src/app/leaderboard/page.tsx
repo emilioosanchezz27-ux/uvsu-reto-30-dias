@@ -104,18 +104,23 @@ export default function LeaderboardPage() {
   async function handleCreateGroup() {
     setModalError('')
     const name = newGroupName.trim() || 'U vs U'
-    const result = await createGroup(name)
-    if (!result) {
-      setModalError('Error al crear el grupo. Inténtalo de nuevo.')
-      return
+    try {
+      const result = await createGroup(name)
+      console.log('[handleCreateGroup] result:', result)
+      if (!result) {
+        setModalError('Error al crear el grupo. Revisa la consola para más detalles.')
+        return
+      }
+      const myGroups = await getMyGroups()
+      setGroups(myGroups)
+      setSelectedGroupId(result.id)
+      setShowCreateModal(false)
+      setNewGroupName('')
+      await postFeedEvent(result.id, 'joined', null, { group_name: name })
+    } catch (err) {
+      console.error('[handleCreateGroup] exception:', err)
+      setModalError('Error inesperado. Revisa la consola.')
     }
-    const myGroups = await getMyGroups()
-    setGroups(myGroups)
-    setSelectedGroupId(result.id)
-    setShowCreateModal(false)
-    setNewGroupName('')
-    // Publicar evento joined
-    await postFeedEvent(result.id, 'joined', null, { group_name: name })
   }
 
   async function handleJoinGroup() {

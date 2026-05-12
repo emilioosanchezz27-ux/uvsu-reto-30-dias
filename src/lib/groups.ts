@@ -39,7 +39,10 @@ export interface FeedEvent {
 
 export async function createGroup(name: string): Promise<{ id: string; inviteCode: string } | null> {
   const session = await getSession()
-  if (!session) return null
+  if (!session) {
+    console.error('[createGroup] No session — usuario no autenticado')
+    return null
+  }
 
   const inviteCode = randomCode()
   const supabase = createClient()
@@ -50,7 +53,10 @@ export async function createGroup(name: string): Promise<{ id: string; inviteCod
     .select('id, invite_code')
     .single()
 
-  if (error) return null
+  if (error) {
+    console.error('[createGroup] Supabase error:', error.code, error.message, error.details)
+    return null
+  }
   return { id: data.id, inviteCode: data.invite_code }
 }
 
