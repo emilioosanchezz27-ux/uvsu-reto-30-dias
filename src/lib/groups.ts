@@ -57,6 +57,16 @@ export async function createGroup(name: string): Promise<{ id: string; inviteCod
     console.error('[createGroup] Supabase error:', error.code, error.message, error.details)
     return null
   }
+
+  // Agregar al creador como miembro del grupo
+  const { error: memberError } = await supabase
+    .from('group_members')
+    .insert({ group_id: data.id, user_id: session.user.id, challenge_id: null })
+
+  if (memberError) {
+    console.error('[createGroup] Error al agregar creador como miembro:', memberError.message)
+  }
+
   return { id: data.id, inviteCode: data.invite_code }
 }
 
