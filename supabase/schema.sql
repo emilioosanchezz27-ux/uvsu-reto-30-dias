@@ -66,7 +66,7 @@ create table if not exists public.admin_config (
   id                              int primary key default 1 check (id = 1),
   official_challenge_start_date   date,
   official_challenge_name         text not null default 'U vs U',
-  motivational_quotes             jsonb not null default '["El único rival eres tú mismo.", "30 días. Un solo rival. Tú.", "No es motivación, es disciplina.", "Cada check es una victoria. Cada victoria es carácter.", "U vs U. Gana el que se mueve."]'::jsonb,
+  motivational_quotes             jsonb not null default '[]'::jsonb,
   updated_at                      timestamptz default now()
 );
 

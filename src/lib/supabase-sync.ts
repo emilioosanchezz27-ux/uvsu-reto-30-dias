@@ -64,6 +64,7 @@ function fromDbLog(row: Record<string, unknown>): DailyLog {
 
 export async function signInWithGoogle(): Promise<void> {
   const supabase = createClient()
+  if (!supabase) { console.error('[Auth] Supabase no disponible'); return }
   await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -74,17 +75,20 @@ export async function signInWithGoogle(): Promise<void> {
 
 export async function signOut(): Promise<void> {
   const supabase = createClient()
+  if (!supabase) return
   await supabase.auth.signOut()
 }
 
 export async function getSession() {
   const supabase = createClient()
+  if (!supabase) return null
   const { data } = await supabase.auth.getSession()
   return data.session
 }
 
 export async function getCurrentUser() {
   const supabase = createClient()
+  if (!supabase) return null
   const { data } = await supabase.auth.getUser()
   return data.user
 }
@@ -93,6 +97,7 @@ export async function getCurrentUser() {
 
 export async function upsertChallenge(challenge: Challenge): Promise<void> {
   const supabase = createClient()
+  if (!supabase) return
   const session = await getSession()
   if (!session) return
 
@@ -122,6 +127,7 @@ export async function upsertChallenge(challenge: Challenge): Promise<void> {
 
 export async function fetchChallenge(): Promise<Challenge | null> {
   const supabase = createClient()
+  if (!supabase) return null
   const session = await getSession()
   if (!session) return null
 
@@ -159,6 +165,7 @@ export async function fetchChallenge(): Promise<Challenge | null> {
 
 export async function updateHabitInDb(habitId: string, updates: Partial<Habit>): Promise<void> {
   const supabase = createClient()
+  if (!supabase) return
   const session = await getSession()
   if (!session) return
 
@@ -176,6 +183,7 @@ export async function updateHabitInDb(habitId: string, updates: Partial<Habit>):
 
 export async function upsertLog(log: DailyLog): Promise<void> {
   const supabase = createClient()
+  if (!supabase) return
   const session = await getSession()
   if (!session) return
 
@@ -193,6 +201,7 @@ export async function upsertLog(log: DailyLog): Promise<void> {
 
 export async function fetchLogs(challengeId: string): Promise<DailyLog[]> {
   const supabase = createClient()
+  if (!supabase) return []
   const session = await getSession()
   if (!session) return []
 
@@ -231,6 +240,7 @@ export async function migrateLocalToSupabase(
 
 export async function fetchAdminConfig() {
   const supabase = createClient()
+  if (!supabase) return null
   const { data } = await supabase
     .from('admin_config')
     .select('*')
@@ -249,6 +259,7 @@ export async function trackEvent(event: {
   metadata?: Record<string, unknown>
 }): Promise<void> {
   const supabase = createClient()
+  if (!supabase) return
   await supabase.from('analytics_events').insert({
     event_type: event.eventType,
     challenge_mode: event.challengeMode,
