@@ -37,7 +37,8 @@ export interface FeedEvent {
 
 // ── Grupos ────────────────────────────────────────────────────
 
-export async function createGroup(name: string): Promise<{ id: string; inviteCode: string } | null> {
+// challengeId es el reto activo del creador — sin esto el leaderboard muestra todo en 0
+export async function createGroup(name: string, challengeId?: string): Promise<{ id: string; inviteCode: string } | null> {
   const session = await getSession()
   if (!session) {
     console.error('[createGroup] No session — usuario no autenticado')
@@ -58,16 +59,58 @@ export async function createGroup(name: string): Promise<{ id: string; inviteCod
     return null
   }
 
-  // Agregar al creador como miembro del grupo
   const { error: memberError } = await supabase
     .from('group_members')
-    .insert({ group_id: data.id, user_id: session.user.id, challenge_id: null })
+    .insert({ group_id: data.id, user_id: session.user.id, challenge_id: challengeId ?? null })
 
   if (memberError) {
     console.error('[createGroup] Error al agregar creador como miembro:', memberError.message)
   }
 
   return { id: data.id, inviteCode: data.invite_code }
+}
+
+// Actualiza challenge_id para el usuario actual en todos los grupos donde sea null.
+// Requiere: policy "Usuario actualiza su membresía" en group_members (ver supabase/patches.sql)
+export async function syncMemberChallengeId(challengeId: string): Promise<void> {
+  const session = await getSession()
+  if (!session) return
+  try {
+    await createClient()
+      .from('group_members')
+      .update({ challenge_id: challengeId })
+      .eq('user_id', session.user.id)
+      .is('challenge_id', null)
+  } catch {
+    // Silencioso — la policy puede no existir todavía
+  }
+}
+
+// Abandona un grupo (elimina solo la membresía del usuario actual)
+export async function leaveGroup(groupId: string): Promise<boolean> {
+  const session = await getSession()
+  if (!session) return false
+  const { error } = await createClient()
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('user_id', session.user.id)
+  if (error) console.error('[leaveGroup]', error.message)
+  return !error
+}
+
+// Borra el grupo completo (solo el creador). CASCADE elimina miembros y feed.
+// Requiere: policy "Creador elimina grupo" en groups (ver supabase/patches.sql)
+export async function deleteGroup(groupId: string): Promise<boolean> {
+  const session = await getSession()
+  if (!session) return false
+  const { error } = await createClient()
+    .from('groups')
+    .delete()
+    .eq('id', groupId)
+    .eq('created_by', session.user.id)
+  if (error) console.error('[deleteGroup]', error.message)
+  return !error
 }
 
 export async function joinGroupByCode(inviteCode: string, challengeId?: string): Promise<string | null> {
@@ -102,20 +145,20 @@ export async function joinGroupByCode(inviteCode: string, challengeId?: string):
   return group.id
 }
 
-export async function getMyGroups(): Promise<Array<{ id: string; name: string; inviteCode: string; memberCount: number }>> {
+export async function getMyGroups(): Promise<Array<{ id: string; name: string; inviteCode: string; memberCount: number; createdBy: string | null }>> {
   const session = await getSession()
   if (!session) return []
 
   const supabase = createClient()
   const { data } = await supabase
     .from('group_members')
-    .select('group_id, groups(id, name, invite_code)')
+    .select('group_id, groups(id, name, invite_code, created_by)')
     .eq('user_id', session.user.id)
 
   if (!data) return []
 
   const results = await Promise.all(
-    (data as unknown as Array<{ group_id: string; groups: { id: string; name: string; invite_code: string } }>)
+    (data as unknown as Array<{ group_id: string; groups: { id: string; name: string; invite_code: string; created_by: string | null } }>)
       .map(async (row) => {
         const { count } = await supabase
           .from('group_members')
@@ -125,6 +168,7 @@ export async function getMyGroups(): Promise<Array<{ id: string; name: string; i
           id: row.groups.id,
           name: row.groups.name,
           inviteCode: row.groups.invite_code,
+          createdBy: row.groups.created_by,
           memberCount: count ?? 0,
         }
       })

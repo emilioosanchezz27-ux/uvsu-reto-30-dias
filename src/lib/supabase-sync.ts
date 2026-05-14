@@ -162,6 +162,18 @@ export async function updateHabitInDb(habitId: string, updates: Partial<Habit>):
   await createClient().from('habits').update(dbUpdates).eq('id', habitId)
 }
 
+export async function insertHabitInDb(habit: Habit): Promise<void> {
+  const session = await getSession()
+  if (!session) return
+  await createClient().from('habits').upsert(toDbHabit(habit))
+}
+
+export async function deleteHabitFromDb(habitId: string): Promise<void> {
+  const session = await getSession()
+  if (!session) return
+  await createClient().from('habits').delete().eq('id', habitId)
+}
+
 // ── Daily Logs ────────────────────────────────────────────────────────────────
 
 export async function upsertLog(log: DailyLog): Promise<void> {

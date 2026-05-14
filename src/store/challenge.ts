@@ -10,9 +10,10 @@ import {
   fetchLogs,
   getSession,
   updateHabitInDb,
+  insertHabitInDb,
+  deleteHabitFromDb,
   migrateLocalToSupabase,
 } from '@/lib/supabase-sync'
-import { nanoid } from 'nanoid'
 
 interface ChallengeState {
   challenge: Challenge | null
@@ -103,7 +104,7 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
 
     const existingLog = logs.find(l => l.habitId === habitId && l.logDate === activeDate)
     const log: DailyLog = {
-      id: existingLog?.id ?? nanoid(),
+      id: existingLog?.id ?? crypto.randomUUID(),
       challengeId: challenge.id,
       habitId,
       logDate: activeDate,
@@ -157,15 +158,14 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
     if (!challenge) return
     const newHabit: Habit = {
       ...habitData,
-      id: nanoid(),
+      id: crypto.randomUUID(),
       challengeId: challenge.id,
       sortOrder: challenge.habits.length,
     }
     const updatedChallenge = { ...challenge, habits: [...challenge.habits, newHabit] }
     LocalStorage.setChallenge(updatedChallenge)
     set({ challenge: updatedChallenge })
-    // Sync en background
-    upsertChallenge(updatedChallenge).catch(console.error)
+    insertHabitInDb(newHabit).catch(console.error)
   },
 
   removeHabit: (habitId) => {
@@ -174,6 +174,7 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
     const updatedChallenge = { ...challenge, habits: challenge.habits.filter(h => h.id !== habitId) }
     LocalStorage.setChallenge(updatedChallenge)
     set({ challenge: updatedChallenge })
+    deleteHabitFromDb(habitId).catch(console.error)
   },
 
   clearChallenge: () => {

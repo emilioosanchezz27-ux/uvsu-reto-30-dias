@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, Users, Plus, Link2, RefreshCw, ChevronRight, Flame, Star, Zap, X } from 'lucide-react'
+import { Trophy, Plus, Link2, RefreshCw, Flame, Star, Zap, X, MoreHorizontal, LogOut, Trash2, AlertTriangle } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { getSession } from '@/lib/supabase-sync'
 import {
@@ -13,6 +13,9 @@ import {
   getFeedEvents,
   postFeedEvent,
   feedEventLabel,
+  syncMemberChallengeId,
+  leaveGroup,
+  deleteGroup,
   LeaderboardEntry,
   FeedEvent,
 } from '@/lib/groups'
@@ -25,7 +28,7 @@ export default function LeaderboardPage() {
   const router = useRouter()
   const { challenge } = useChallengeStore()
 
-  const [groups, setGroups] = useState<Array<{ id: string; name: string; inviteCode: string; memberCount: number }>>([])
+  const [groups, setGroups] = useState<Array<{ id: string; name: string; inviteCode: string; memberCount: number; createdBy: string | null }>>([])
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [feed, setFeed] = useState<FeedEvent[]>([])
@@ -34,6 +37,9 @@ export default function LeaderboardPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showJoinModal, setShowJoinModal] = useState(false)
+  const [showGroupMenu, setShowGroupMenu] = useState(false)
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [modalError, setModalError] = useState('')
@@ -54,9 +60,14 @@ export default function LeaderboardPage() {
         setSelectedGroupId(myGroups[0].id)
       }
       setLoading(false)
+
+      // Sincronizar challenge_id en todos los grupos donde sea null (fix bug Día 0)
+      if (challenge?.id) {
+        syncMemberChallengeId(challenge.id).catch(() => {})
+      }
     }
     init()
-  }, [router])
+  }, [router, challenge?.id])
 
   useEffect(() => {
     if (!selectedGroupId) return
@@ -105,7 +116,8 @@ export default function LeaderboardPage() {
     setModalError('')
     const name = newGroupName.trim() || 'U vs U'
     try {
-      const result = await createGroup(name)
+      // Pasar challenge?.id para que el creador aparezca con datos en el leaderboard
+      const result = await createGroup(name, challenge?.id)
       if (!result) {
         setModalError('Error al crear el grupo. Inténtalo de nuevo.')
         return
@@ -120,6 +132,30 @@ export default function LeaderboardPage() {
       console.error('[handleCreateGroup]', err)
       setModalError('Error inesperado. Inténtalo de nuevo.')
     }
+  }
+
+  async function handleLeaveGroup() {
+    if (!selectedGroupId) return
+    const ok = await leaveGroup(selectedGroupId)
+    if (ok) {
+      const myGroups = await getMyGroups()
+      setGroups(myGroups)
+      setSelectedGroupId(myGroups[0]?.id ?? null)
+    }
+    setShowLeaveConfirm(false)
+    setShowGroupMenu(false)
+  }
+
+  async function handleDeleteGroup() {
+    if (!selectedGroupId) return
+    const ok = await deleteGroup(selectedGroupId)
+    if (ok) {
+      const myGroups = await getMyGroups()
+      setGroups(myGroups)
+      setSelectedGroupId(myGroups[0]?.id ?? null)
+    }
+    setShowDeleteConfirm(false)
+    setShowGroupMenu(false)
   }
 
   async function handleJoinGroup() {
@@ -285,6 +321,15 @@ export default function LeaderboardPage() {
                 >
                   <RefreshCw size={14} color="var(--text-secondary)" className={refreshing ? 'animate-spin' : ''} />
                 </button>
+                {selectedGroup && (
+                  <button
+                    onClick={() => setShowGroupMenu(true)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg"
+                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+                  >
+                    <MoreHorizontal size={14} color="var(--text-secondary)" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -520,6 +565,154 @@ export default function LeaderboardPage() {
               >
                 Unirme
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: Menú del grupo (abandonar / borrar) */}
+      <AnimatePresence>
+        {showGroupMenu && selectedGroup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center"
+            style={{ background: 'rgba(0,0,0,0.7)' }}
+            onClick={() => setShowGroupMenu(false)}
+          >
+            <motion.div
+              initial={{ y: 80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 80, opacity: 0 }}
+              className="w-full max-w-md rounded-t-3xl p-6"
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-lg font-black" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  {selectedGroup.name}
+                </h2>
+                <button onClick={() => setShowGroupMenu(false)}>
+                  <X size={20} color="var(--text-secondary)" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <button
+                  onClick={() => { setShowGroupMenu(false); setShowLeaveConfirm(true) }}
+                  className="w-full py-3 rounded-xl flex items-center gap-3 px-4 text-sm font-semibold"
+                  style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+                >
+                  <LogOut size={16} color="var(--text-secondary)" />
+                  Abandonar grupo
+                </button>
+                {selectedGroup.createdBy === currentUserId && (
+                  <button
+                    onClick={() => { setShowGroupMenu(false); setShowDeleteConfirm(true) }}
+                    className="w-full py-3 rounded-xl flex items-center gap-3 px-4 text-sm font-semibold"
+                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)' }}
+                  >
+                    <Trash2 size={16} color="var(--danger)" />
+                    Borrar grupo para todos
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: Confirmar abandonar */}
+      <AnimatePresence>
+        {showLeaveConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center"
+            style={{ background: 'rgba(0,0,0,0.7)' }}
+            onClick={() => setShowLeaveConfirm(false)}
+          >
+            <motion.div
+              initial={{ y: 80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 80, opacity: 0 }}
+              className="w-full max-w-md rounded-t-3xl p-6"
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <AlertTriangle size={20} color="var(--accent-primary)" />
+                <h2 className="text-lg font-black" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>¿Abandonar grupo?</h2>
+              </div>
+              <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
+                Ya no aparecerás en el leaderboard de <strong>{selectedGroup?.name}</strong>. Podrás volver a unirte con el código.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleLeaveGroup}
+                  className="flex-1 py-3 rounded-xl font-bold text-sm"
+                  style={{ background: 'var(--accent-primary)', color: '#000' }}
+                >
+                  Abandonar
+                </button>
+                <button
+                  onClick={() => setShowLeaveConfirm(false)}
+                  className="flex-1 py-3 rounded-xl font-semibold text-sm"
+                  style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: Confirmar borrar grupo */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end justify-center"
+            style={{ background: 'rgba(0,0,0,0.7)' }}
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            <motion.div
+              initial={{ y: 80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 80, opacity: 0 }}
+              className="w-full max-w-md rounded-t-3xl p-6"
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <AlertTriangle size={20} color="var(--danger)" />
+                <h2 className="text-lg font-black" style={{ fontFamily: 'Space Grotesk, sans-serif', color: 'var(--danger)' }}>
+                  ¿Borrar grupo?
+                </h2>
+              </div>
+              <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
+                Esto eliminará <strong>{selectedGroup?.name}</strong> para todos los miembros. Se perderá el historial del feed y el leaderboard del grupo. Esta acción no se puede deshacer.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteGroup}
+                  className="flex-1 py-3 rounded-xl font-bold text-sm"
+                  style={{ background: 'var(--danger)', color: '#fff' }}
+                >
+                  Sí, borrar
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-3 rounded-xl font-semibold text-sm"
+                  style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                >
+                  Cancelar
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
